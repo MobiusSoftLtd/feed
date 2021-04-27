@@ -1,0 +1,19 @@
+{
+  "env": {
+    "development": {
+      "presets": [
+      ]
+    }
+  },
+  "plugins": [],
+  "presets": [
+    [
+      "@babel/preset-env",
+      {
+        "targets": {
+          "node": "current"
+        }
+      }
+    ]
+  ]
+}
