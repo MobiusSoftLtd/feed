@@ -18,61 +18,71 @@ export default class Service extends EventEmitter {
   }
 
   async start() {
-    this._feeds = {};
-    this._depths = {};
+    this.feeds = {};
+    this.depths = {};
 
-    return Promise.all(Object.entries(Config.exchanges)
-      .map(async ([name, props]) => this.startFeed(name, props)));
+    return Promise.all(
+      Object.entries(Config.exchanges).map(async ([name, props]) =>
+        this.startFeed(name, props)
+      )
+    );
   }
 
   getSnapshots() {
-    return Object.entries(this._depths)
+    return Object.entries(this.depths)
       .filter(([, depth]) => depth && depth.Asks)
-      .map(([name, {Asks, Bids}]) => ({
+      .map(([name, { Asks, Bids }]) => ({
         name,
         asks: [...Asks].sort(sortResult),
         bids: [...Bids].sort(sortResult),
       }));
   }
 
-  async startFeed(name, props) {
-    if (!exchanges[name] || !props.enabled) {
+  startFeed(name, { enabled, settings = {}, symbols = {} }) {
+    if (!enabled || !exchanges[name]) {
       return;
     }
 
-    const symbols = Config.symbols.filter(({exchange}) => exchange === name);
-
-    if (symbols.length > 0) {
-      this._feeds[name] = new exchanges[name](props, symbols);
-
-      this._feeds[name].on('snapshot', this._onSnapshot.bind(this, name));
-      this._feeds[name].on('update', this._onUpdate.bind(this, name));
-    }
+    this.feeds[name] = new exchanges[name](name, settings, symbols);
+    this.feeds[name].on('snapshot', this.onSnapshot.bind(this, name));
+    this.feeds[name].on('update', this.onUpdate.bind(this, name));
+    this.feeds[name].start();
   }
 
   stop() {
-    Object.values(this._feeds).forEach((feed) => {
+    Object.values(this.feeds).forEach((feed) => {
       feed.removeAllListeners();
       feed.destroy();
     });
 
-    this._feeds = null;
+    this.feeds = null;
   }
 
-  _onSnapshot(name, symbol, depth) {
-    this._depths[symbol] = null;
-    this._onUpdate(name, symbol, depth);
+  onSnapshot(name, symbol, depth) {
+    this.depths[symbol] = null;
+    this.onUpdate(name, symbol, depth);
   }
 
-  _onUpdate(name, symbol, depth) {
+  onUpdate(name, symbol, depth) {
+    let asks = new Map(depth.Asks);
+    let bids = new Map(depth.Bids);
+
+    if (asks.size > DEPTH_MAX_LENGTH) {
+      const asksArr = [...asks.entries()].sort(sortAsks);
+      asksArr.length = DEPTH_MAX_LENGTH;
+      asks = new Map(asksArr);
+    }
+
+    if (bids.size > DEPTH_MAX_LENGTH) {
+      const bidsArr = [...bids.entries()].sort(sortBids);
+      bidsArr.length = DEPTH_MAX_LENGTH;
+      bids = new Map(bidsArr);
+    }
+
     const ask =
-      depth.Asks.size > 0
-        ? [...depth.Asks.keys()].sort(sortDepthAsks)[0]
-        : 0;
+      depth.Asks.size > 0 ? [...depth.Asks.keys()].sort(sortDepthAsks)[0] : 0;
     const bid =
-      depth.Bids.size > 0
-        ? [...depth.Bids.keys()].sort(sortDepthBids)[0]
-        : 0;
+      depth.Bids.size > 0 ? [...depth.Bids.keys()].sort(sortDepthBids)[0] : 0;
 
     if (bid > ask) {
       console.error(
@@ -82,9 +92,8 @@ export default class Service extends EventEmitter {
           sizeBids: depth.Bids.size,
         }
       );
-      if (this._feeds[name].reconnect) {
-        this._feeds[name].reconnect('BidMoreAsk');
-      }
+      this.feeds[name].destroy();
+      this.startFeed(name, Config.exchanges[name]);
       return;
     }
 
@@ -102,39 +111,22 @@ export default class Service extends EventEmitter {
 
     let price = 0;
     let volume = 0;
-    let asks;
-    let bids;
     let incrementAsks;
     let incrementBids;
     let isSnapshot = false;
 
-    asks = new Map(depth.Asks);
-    bids = new Map(depth.Bids);
-
-    if (asks.size > DEPTH_MAX_LENGTH) {
-      const asksArr = [...asks.entries()].sort(sortAsks);
-      asksArr.length = DEPTH_MAX_LENGTH;
-      asks = new Map(asksArr);
-    }
-
-    if (bids.size > DEPTH_MAX_LENGTH) {
-      const bidsArr = [...bids.entries()].sort(sortBids);
-      bidsArr.length = DEPTH_MAX_LENGTH;
-      bids = new Map(bidsArr);
-    }
-
     // Find increment
-    if (!this._depths[symbol] || !this._depths[symbol].Asks) {
+    if (!this.depths[symbol] || !this.depths[symbol].Asks) {
       incrementAsks = asks;
       incrementBids = bids;
       isSnapshot = true;
 
-      this._depths[symbol] = {
+      this.depths[symbol] = {
         Asks: null,
         Bids: null,
       };
     } else {
-      const { Asks: oldAsks, Bids: oldBids } = this._depths[symbol];
+      const { Asks: oldAsks, Bids: oldBids } = this.depths[symbol];
 
       incrementAsks = new Map();
       incrementBids = new Map();
@@ -162,18 +154,13 @@ export default class Service extends EventEmitter {
       }
     }
 
-    this._depths[symbol].Asks = asks;
-    this._depths[symbol].Bids = bids;
+    this.depths[symbol].Asks = asks;
+    this.depths[symbol].Bids = bids;
 
-    this._notify(symbol, incrementAsks, incrementBids, isSnapshot);
+    this.notify(symbol, incrementAsks, incrementBids, isSnapshot);
   }
 
-  _notify(
-    name,
-    asks,
-    bids,
-    isSnapshot = false
-  ) {
+  notify(name, asks, bids, isSnapshot = false) {
     const event = isSnapshot ? 'snapshot' : 'update';
 
     const message = {
@@ -181,6 +168,8 @@ export default class Service extends EventEmitter {
       asks: [...asks].sort(sortResult),
       bids: [...bids].sort(sortResult),
     };
+
+    // console.log(event, message);
 
     this.emit(event, message);
   }

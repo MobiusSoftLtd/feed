@@ -5,12 +5,15 @@ const TIMEOUT = 15000;
 const PING_INTERVAL = 10000;
 
 export class ExchangeWS extends EventEmitter {
-  constructor(settings, symbols, name) {
+  constructor(name, settings, symbols) {
     super();
     this.setMaxListeners(100);
 
     this.name = name;
-    this._settings = settings;
+    this.settings = {
+      headers: {},
+      ...settings,
+    };
     this.symbols = symbols;
 
     this.snapshots = {};
@@ -25,16 +28,6 @@ export class ExchangeWS extends EventEmitter {
     this.reconnectTimeoutId = 0;
     this.retryCount = this.options.retryCount;
     this.shouldAttemptReconnect = !!this.options.reconnectInterval;
-
-    this.start = this.start.bind(this);
-    this.checkTimeout = this.checkTimeout.bind(this);
-    this.sendPing = this.sendPing.bind(this);
-    this.onMessage = this.onMessage.bind(this);
-    this.onOpen = this.onOpen.bind(this);
-    this.onError = this.onError.bind(this);
-    this.onClose = this.onClose.bind(this);
-
-    this.start();
   }
 
   start() {
@@ -46,36 +39,37 @@ export class ExchangeWS extends EventEmitter {
     this.isConnected = false;
     this.snapshots = {};
 
-    this.socket = new WebSocket(this._settings.url, {
+    this.socket = new WebSocket(this.settings.url, {
       perMessageDeflate: false,
+      headers: this.settings.headers,
     });
-    this.socket.onmessage = this.onMessage;
-    this.socket.onopen = this.onOpen;
-    this.socket.onerror = this.onError;
-    this.socket.onclose = this.onClose;
+    this.socket.onmessage = this.onMessage.bind(this);
+    this.socket.onopen = this.onOpen.bind(this);
+    this.socket.onerror = this.onError.bind(this);
+    this.socket.onclose = this.onClose.bind(this);
 
-    this._lastActive = Date.now();
+    this.lastActive = Date.now();
     this.checkTimeout();
   }
 
   checkTimeout() {
     const now = Date.now();
-    const isTimeout = this._lastActive + TIMEOUT < now;
+    const isTimeout = this.lastActive + TIMEOUT < now;
 
     // console.log(this.name, 'checkTimeout', isTimeout);
 
     if (isTimeout) {
       this.onTimeout();
     } else {
-      this._lastActive = now;
-      this.timerTimeout = setTimeout(this.checkTimeout, TIMEOUT);
+      this.lastActive = now;
+      this.timerTimeout = setTimeout(this.checkTimeout.bind(this), TIMEOUT);
       this.timerTimeout.unref();
     }
   }
 
   destroy() {
+    this.removeAllListeners();
     console.log(this.name, 'destroy');
-
     clearTimeout(this.reconnectTimeoutId);
     this.shouldAttemptReconnect = false;
     this.socket.close();
@@ -91,12 +85,13 @@ export class ExchangeWS extends EventEmitter {
 
   reconnect() {}
 
-  _subscribe(symbol) {}
+  subscribe(symbol) {}
 
-  _unsubscribe(symbol) {}
+  unsubscribe(symbol) {}
 
   onOpen() {
     console.log(this.name, 'open');
+    this.snapshots = {};
 
     this.isConnected = true;
 
@@ -106,14 +101,14 @@ export class ExchangeWS extends EventEmitter {
     this.subscribeSymbols();
 
     clearInterval(this.pingInterval);
-    this.pingInterval = setInterval(this.sendPing, PING_INTERVAL);
+    this.pingInterval = setInterval(this.sendPing.bind(this), PING_INTERVAL);
 
     this.emit('connect');
   }
 
   subscribeSymbols() {
-    this.symbols.forEach(({srcName}) => {
-      this._subscribe(srcName);
+    Object.keys(this.symbols).forEach((name) => {
+      this.subscribe(name);
     });
   }
 
@@ -141,7 +136,7 @@ export class ExchangeWS extends EventEmitter {
   }
 
   onClose(reason = '') {
-    reason = reason.message || reason.reason || reason;
+    reason = reason.message || reason.reason || `code=${reason.code}` || reason;
 
     this.snapshots = {};
 
@@ -159,7 +154,7 @@ export class ExchangeWS extends EventEmitter {
 
     if (this.shouldAttemptReconnect && this.retryCount > 0) {
       this.retryCount--;
-      console.log(this.name, 'reconnect task', this.retryCount);
+      console.log(this.name, 'reconnect retry', this.retryCount);
 
       clearTimeout(this.reconnectTimeoutId);
 
@@ -176,6 +171,6 @@ export class ExchangeWS extends EventEmitter {
   }
 
   onMessage(inMessage) {
-    this._lastActive = Date.now();
+    this.lastActive = Date.now();
   }
 }
