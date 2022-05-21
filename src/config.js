@@ -5,6 +5,26 @@ export default {
   authToken: '',
   rejectAskBidDiff: 10,
   exchanges: {
+    Binance: {
+      enabled: true,
+      symbols: {
+        BTCUSDT: {
+          name: 'B.BTCUSD',
+        },
+        XRPBTC: {
+          name: 'B.XRPBTC',
+        },
+        EOSBTC: {
+          name: 'B.EOSBTC',
+        },
+        ADABTC: {
+          name: 'B.ADABTC',
+        },
+        DOTBTC: {
+          name: 'B.DOTBTC',
+        },
+      },
+    },
     Tradernet: {
       enabled: false,
       symbols: {
@@ -47,7 +67,7 @@ export default {
       },
     },
     Mobius: {
-      enabled: true,
+      enabled: false,
       settings: {
         url: 'ws://example.com',
         token: '',

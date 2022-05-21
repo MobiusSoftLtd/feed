@@ -14,21 +14,22 @@
   "author": "Mobius Soft Ltd.",
   "license": "ISC",
   "devDependencies": {
-    "@babel/cli": "^7.13.16",
-    "@babel/core": "^7.13.16",
-    "@babel/preset-env": "^7.13.15",
-    "@babel/register": "^7.13.16",
-    "babel-eslint": "^10.1.0",
-    "eslint": "^7.25.0",
-    "eslint-config-prettier": "^8.3.0",
-    "eslint-loader": "^4.0.2",
-    "eslint-plugin-import": "^2.22.1",
-    "eslint-plugin-prettier": "^3.4.0",
-    "prettier": "^2.2.1"
+    "@babel/cli": "7.17.10",
+    "@babel/core": "7.18.0",
+    "@babel/preset-env": "7.18.0",
+    "@babel/register": "7.17.7",
+    "babel-eslint": "10.1.0",
+    "eslint": "7.32.0",
+    "eslint-config-prettier": "8.5.0",
+    "eslint-loader": "4.0.2",
+    "eslint-plugin-import": "2.26.0",
+    "eslint-plugin-prettier": "4.0.0",
+    "prettier": "2.6.2"
   },
   "dependencies": {
+    "axios": "0.27.2",
     "core-js": "3",
-    "fix-client": "^1.2.9",
-    "ws": "^7.4.5"
+    "fix-client": "1.2.12",
+    "ws": "8.6.0"
   }
 }
